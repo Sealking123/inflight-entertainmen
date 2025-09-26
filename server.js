@@ -9,13 +9,49 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// Optional: redirect / to /index.html (landing page)
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// --- Food Order System ---
+let orders = []; // { id, item, type, status, message }
+
 io.on('connection', (socket) => {
-  // Listen for admin events and broadcast them to all other sockets
+  // Passenger places order
+  socket.on('place-order', (order) => {
+    order.id = Date.now() + '-' + Math.floor(Math.random()*10000);
+    order.status = "Pending";
+    order.message = "";
+    orders.push(order);
+    io.emit('new-order', order); // Update all admins
+  });
+
+  // Admin gets all current orders on connect
+  socket.on('get-orders', () => {
+    socket.emit('order-list', orders);
+  });
+
+  // Admin updates order status
+  socket.on('order-action', ({id, action, message}) => {
+    const order = orders.find(o => o.id === id);
+    if(order) {
+      if(action === "accept") {
+        order.status = "Accepted";
+        order.message = "";
+      }
+      if(action === "deny") {
+        order.status = "Denied";
+        order.message = message || "Order denied";
+      }
+      if(action === "cancel") {
+        order.status = "Cancelled";
+        order.message = message || "Order cancelled";
+      }
+      io.emit('order-update', order); // Update all clients
+    }
+  });
+
+  // --- Existing admin-command logic ---
   socket.on('admin-command', (cmd) => {
     socket.broadcast.emit('screen-command', cmd);
   });
