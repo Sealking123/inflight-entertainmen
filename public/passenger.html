@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <style>
     body { background: #2d3e5e; color: #fff; font-family: Arial, sans-serif; margin: 0; }
-    .screen { width: 320px; height: 210px; margin: 40px auto; background: #1b2741; border-radius: 14px; box-shadow: 0 2px 12px #000a; padding: 20px; }
+    .screen { width: 320px; min-height: 210px; margin: 40px auto; background: #1b2741; border-radius: 14px; box-shadow: 0 2px 12px #000a; padding: 20px; }
     .center { text-align: center; }
     .btn { background: #ffa500; border: none; color: #fff; padding: 12px 28px; border-radius: 24px; margin: 10px; font-size: 16px; cursor: pointer; }
     .btn.secondary { background: #0079c1; }
@@ -13,6 +13,13 @@
     .media-item { width: 64px; }
     .media-item img { width: 100%; border-radius: 6px; border: 2px solid #fff3; }
     .media-item-title { font-size: 12px; margin-top: 4px; text-align: center; }
+    .order-status { font-size: 15px; margin: 12px 0; color: #ffa500;}
+    .order-message { font-size: 14px; color: #ff5050;}
+    .food-menu, .drinks-menu { margin-top: 20px;}
+    .menu-title { font-weight: bold; font-size: 18px; margin-bottom: 8px;}
+    .food-item, .drink-item { margin-bottom: 8px;}
+    input[type="radio"] { margin-right: 5px;}
+    #orderForm { margin-top: 12px;}
   </style>
   <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -23,7 +30,7 @@
       <p>Choose a language to get started.</p>
       <button class="btn" onclick="showMedia()">Let's Explore</button>
       <div style="margin-top: 18px;">
-        <button class="btn secondary">Order Food/Drinks</button>
+        <button class="btn secondary" onclick="showOrder()">Order Food/Drinks</button>
         <button class="btn secondary">Order Crew Help</button>
       </div>
     </div>
@@ -37,6 +44,30 @@
         <div class="media-item"><img src="https://via.placeholder.com/64x90?text=Movie3"><div class="media-item-title">Movie 3</div></div>
         <div class="media-item"><img src="https://via.placeholder.com/64x90?text=Movie4"><div class="media-item-title">Movie 4</div></div>
       </div>
+      <button class="btn secondary" onclick="showOrder()">Order Food/Drinks</button>
+    </div>
+  </div>
+  <div class="screen" id="orderScreen" style="display:none">
+    <div class="center">
+      <div class="menu-title">Food Menu</div>
+      <div class="food-menu">
+        <div class="food-item"><input type="radio" name="menu" value="Chicken Sandwich">Chicken Sandwich</div>
+        <div class="food-item"><input type="radio" name="menu" value="Vegetarian Salad">Vegetarian Salad</div>
+        <div class="food-item"><input type="radio" name="menu" value="Cheese Pizza">Cheese Pizza</div>
+      </div>
+      <div class="menu-title">Drinks Menu</div>
+      <div class="drinks-menu">
+        <div class="drink-item"><input type="radio" name="menu" value="Water">Water</div>
+        <div class="drink-item"><input type="radio" name="menu" value="Orange Juice">Orange Juice</div>
+        <div class="drink-item"><input type="radio" name="menu" value="Cola">Cola</div>
+        <div class="drink-item"><input type="radio" name="menu" value="Coffee">Coffee</div>
+        <div class="drink-item"><input type="radio" name="menu" value="Tea">Tea</div>
+      </div>
+      <form id="orderForm" onsubmit="submitOrder(event)">
+        <button class="btn" type="submit">Place Order</button>
+      </form>
+      <div id="orderStatus"></div>
+      <button class="btn secondary" onclick="backToMedia()">Back</button>
     </div>
   </div>
   <div class="screen" id="lockedScreen" style="display:none">
@@ -62,9 +93,19 @@
   </div>
   <script>
     const socket = io();
+    let myOrderId = null;
+
     function showMedia() {
-      document.getElementById('welcomeScreen').style.display = 'none';
+      hideAll();
       document.getElementById('mediaScreen').style.display = '';
+    }
+    function showOrder() {
+      hideAll();
+      document.getElementById('orderScreen').style.display = '';
+      document.getElementById('orderStatus').innerHTML = '';
+    }
+    function backToMedia() {
+      showMedia();
     }
     function lockScreens() {
       hideAll();
@@ -86,8 +127,40 @@
       setTimeout(unlockScreens, 7000);
     }
     function hideAll() {
-      ['welcomeScreen','mediaScreen','lockedScreen','safetyScreen','announceScreen'].forEach(id => document.getElementById(id).style.display = 'none');
+      ['welcomeScreen','mediaScreen','lockedScreen','safetyScreen','announceScreen','orderScreen'].forEach(id => document.getElementById(id).style.display = 'none');
     }
+
+    // Order logic
+    function submitOrder(e) {
+      e.preventDefault();
+      const radio = document.querySelector('input[name="menu"]:checked');
+      if(!radio) {
+        alert("Please select a food or drink item.");
+        return;
+      }
+      const item = radio.value;
+      const order = { item };
+      socket.emit('place-order', order);
+      document.getElementById('orderStatus').innerHTML = '<div class="order-status">Order placed: ' + item + '. Waiting for approval...</div>';
+    }
+
+    socket.on('new-order', (order) => {
+      // If this is our order, remember the id
+      if(order.item && !myOrderId) {
+        myOrderId = order.id;
+      }
+    });
+
+    socket.on('order-update', (order) => {
+      if(myOrderId && order.id === myOrderId) {
+        let statusMsg = '<div class="order-status">Your order: '+order.item+'<br>Status: '+order.status+'</div>';
+        if(order.status === "Denied" || order.status === "Cancelled") {
+          statusMsg += '<div class="order-message">'+order.message+'</div>';
+        }
+        document.getElementById('orderStatus').innerHTML = statusMsg;
+      }
+    });
+
     // Listen for admin commands
     socket.on('screen-command', (cmd) => {
       if (cmd.type === 'lock') lockScreens();
