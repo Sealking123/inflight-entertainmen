@@ -5,11 +5,15 @@
   <meta charset="UTF-8" />
   <style>
     body { background: #0a1941; color: #fff; font-family: Arial, sans-serif; }
-    .admin-panel { width: 350px; margin: 60px auto; background: #1c2650; border-radius: 9px; box-shadow: 0 2px 12px #000a; padding: 32px 24px; }
-    .admin-panel h2 { text-align: center; margin-bottom: 30px; }
+    .admin-panel { width: 350px; margin: 40px auto; background: #1c2650; border-radius: 9px; box-shadow: 0 2px 12px #000a; padding: 32px 24px; }
+    .admin-panel h2 { text-align: center; margin-bottom: 18px; }
     .admin-btn { width: 100%; background: #ffa500; border: none; color: #fff; padding: 14px; border-radius: 22px; font-size: 18px; margin: 12px 0; cursor: pointer; }
     .admin-btn.secondary { background: #0079c1; }
     .admin-panel input { width: 100%; margin: 12px 0; padding: 10px; font-size: 15px; border-radius: 6px; border: none; }
+    .order-card { background: #232e4b; border-radius: 8px; margin: 14px 0; padding: 10px 14px; }
+    .order-status { font-size: 14px; color: #ffa500; }
+    .order-actions button { margin-right: 8px; }
+    .order-message { font-size: 13px; color: #ff5050; }
   </style>
   <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -21,9 +25,61 @@
     <button class="admin-btn secondary" onclick="lock()">Lock Screens</button>
     <button class="admin-btn secondary" onclick="unlock()">Unlock Screens</button>
     <button class="admin-btn" onclick="safety()">Play Safety Brief Video</button>
+    <hr/>
+    <h3>Food/Drink Orders</h3>
+    <div id="ordersList"></div>
   </div>
   <script>
     const socket = io();
+
+    // --- Food order logic ---
+    function renderOrders(orders) {
+      const list = document.getElementById('ordersList');
+      if (!orders.length) {
+        list.innerHTML = '<i>No orders.</i>';
+        return;
+      }
+      list.innerHTML = '';
+      orders.forEach(order => {
+        const div = document.createElement('div');
+        div.className = 'order-card';
+        div.innerHTML = `
+          <div><b>Order:</b> ${order.item}</div>
+          <div class="order-status">Status: ${order.status}</div>
+          <div class="order-actions">
+            <button onclick="acceptOrder('${order.id}')" ${order.status!=="Pending"?'disabled':''}>Accept</button>
+            <button onclick="denyOrder('${order.id}')" ${order.status!=="Pending"?'disabled':''}>Deny</button>
+            <button onclick="cancelOrder('${order.id}')" ${order.status==="Cancelled"||order.status==="Denied"?'disabled':''}>Cancel</button>
+          </div>
+          <div><span class="order-message">${order.message||''}</span></div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function refreshOrders() {
+      socket.emit('get-orders');
+    }
+
+    window.acceptOrder = function(id) {
+      socket.emit('order-action', {id, action: "accept"});
+    };
+    window.denyOrder = function(id) {
+      const msg = prompt("Reason for denial?");
+      socket.emit('order-action', {id, action: "deny", message: msg});
+    };
+    window.cancelOrder = function(id) {
+      const msg = prompt("Reason for cancellation?");
+      socket.emit('order-action', {id, action: "cancel", message: msg});
+    };
+
+    socket.on('order-list', renderOrders);
+    socket.on('new-order', refreshOrders);
+    socket.on('order-update', refreshOrders);
+
+    refreshOrders();
+
+    // --- Existing admin panel commands ---
     function sendAnnounce() {
       var msg = document.getElementById('announceMsg').value || "Welcome aboard!";
       socket.emit('admin-command', { type: 'announce', message: msg });
