@@ -9,10 +9,14 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
+// Optional: redirect / to /index.html (landing page)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 io.on('connection', (socket) => {
-  // Listen for admin events
+  // Listen for admin events and broadcast them to all other sockets
   socket.on('admin-command', (cmd) => {
-    // Broadcast to all except admin
     socket.broadcast.emit('screen-command', cmd);
   });
 });
